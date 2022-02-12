@@ -28,7 +28,7 @@ namespace CreationModelPlugin
             return Result.Succeeded;
         }
 
-        public void CreateWalls(Document doc, Level basedLevel, Level upLevel)
+        public List<Wall> CreateWalls(Document doc, Level basedLevel, Level upLevel)
         {
             List<Wall> walls = new List<Wall>();
             List<XYZ> definingPoints = GetDefiningPoints();
@@ -46,6 +46,7 @@ namespace CreationModelPlugin
 
                 ts.Commit();
             }
+            return walls;
         }
 
         public List<XYZ> GetDefiningPoints()
