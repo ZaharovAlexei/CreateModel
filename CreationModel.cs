@@ -1,6 +1,7 @@
 ﻿using Autodesk.Revit.Attributes;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
+using Autodesk.Revit.DB.Structure;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -24,11 +25,72 @@ namespace CreationModelPlugin
             Level basedLevel = GetLevel(listLevel, "Уровень 1");
             Level upLevel = GetLevel(listLevel, "Уровень 2");
 
-            CreateWalls(doc, basedLevel, upLevel);
+            List<Wall> walls = CreateWalls(doc, basedLevel, upLevel);
+            AddDoor(doc, basedLevel, walls);
+            AddWindows(doc, basedLevel, walls);
             return Result.Succeeded;
         }
 
-        public void CreateWalls(Document doc, Level basedLevel, Level upLevel)
+        private void AddWindows(Document doc, Level basedLevel, List<Wall> walls)
+        {
+            FamilySymbol windowType = new FilteredElementCollector(doc)
+                .OfClass(typeof(FamilySymbol))
+                .OfCategory(BuiltInCategory.OST_Windows)
+                .OfType<FamilySymbol>()
+                .Where(x => x.Name.Equals("0406 x 1220 мм"))
+                .Where(x => x.FamilyName.Equals("Фиксированные"))
+                .FirstOrDefault();
+
+            using (var ts = new Transaction(doc, "Create windows"))
+            {
+                ts.Start();
+                if (!windowType.IsActive)
+                    windowType.Activate();
+
+                for (int i = 1; i < walls.Count; i++)
+                {
+                    LocationCurve hostcurve = walls[i].Location as LocationCurve;
+                    XYZ point1 = hostcurve.Curve.GetEndPoint(0);
+                    XYZ point2 = hostcurve.Curve.GetEndPoint(1);
+                    XYZ point = (point1 + point2) / 2;
+                    FamilyInstance instance = doc.Create.NewFamilyInstance(point, windowType, walls[i], basedLevel, StructuralType.NonStructural);
+                    double offset = UnitUtils.ConvertToInternalUnits(900, UnitTypeId.Millimeters);
+                    instance.get_Parameter(BuiltInParameter.INSTANCE_SILL_HEIGHT_PARAM).Set(offset);
+                }
+
+                ts.Commit();
+            }
+
+        }
+
+        private void AddDoor(Document doc, Level basedLevel, List<Wall> walls)
+        {
+            FamilySymbol doorType = new FilteredElementCollector(doc)
+                .OfClass(typeof(FamilySymbol))
+                .OfCategory(BuiltInCategory.OST_Doors)
+                .OfType<FamilySymbol>()
+                .Where(x => x.Name.Equals("0915 x 2134 мм"))
+                .Where(x => x.FamilyName.Equals("Одиночные-Щитовые"))
+                .FirstOrDefault();
+
+            LocationCurve hostcurve = walls[0].Location as LocationCurve;
+            XYZ point1 = hostcurve.Curve.GetEndPoint(0);
+            XYZ point2 = hostcurve.Curve.GetEndPoint(1);
+            XYZ point = (point1 + point2) / 2;
+
+            using (var ts = new Transaction(doc, "Create door"))
+            {
+                ts.Start();
+
+                if (!doorType.IsActive)
+                    doorType.Activate();
+                doc.Create.NewFamilyInstance(point, doorType, walls[0], basedLevel, StructuralType.NonStructural);
+
+                ts.Commit();
+            }
+        }
+
+        private List<Wall> CreateWalls(Document doc, Level basedLevel, Level upLevel)
         {
             List<Wall> walls = new List<Wall>();
             List<XYZ> definingPoints = GetDefiningPoints();
@@ -46,9 +108,10 @@ namespace CreationModelPlugin
 
                 ts.Commit();
             }
+            return walls;
         }
 
-        public List<XYZ> GetDefiningPoints()
+        private List<XYZ> GetDefiningPoints()
         {
             double width = UnitUtils.ConvertToInternalUnits(10000, UnitTypeId.Millimeters);
             double depth = UnitUtils.ConvertToInternalUnits(5000, UnitTypeId.Millimeters);
@@ -65,7 +128,7 @@ namespace CreationModelPlugin
             return points;
         }
 
-        public Level GetLevel(List<Level> listLevel, string nameLevel)
+        private Level GetLevel(List<Level> listLevel, string nameLevel)
         {
             Level level = listLevel.Where(x => x.Name.Equals(nameLevel)).FirstOrDefault();
             return level;
