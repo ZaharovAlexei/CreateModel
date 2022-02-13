@@ -28,7 +28,38 @@ namespace CreationModelPlugin
             List<Wall> walls = CreateWalls(doc, basedLevel, upLevel);
             AddDoor(doc, basedLevel, walls);
             AddWindows(doc, basedLevel, walls);
+            AddExtrusionRoof(doc, upLevel, walls);
             return Result.Succeeded;
+        }
+
+        private void AddExtrusionRoof(Document doc, Level upLevel, List<Wall> walls)
+        {
+            LocationCurve curve = walls[1].Location as LocationCurve;
+            XYZ startPoint = curve.Curve.GetEndPoint(0);
+            XYZ endPoint = curve.Curve.GetEndPoint(1);
+
+            LocationCurve locationCurve = walls[0].Location as LocationCurve;
+            var distance = locationCurve.Curve.Length+4;
+
+            RoofType roofType = new FilteredElementCollector(doc)
+                        .OfClass(typeof(RoofType))
+                        .OfType<RoofType>()
+                        .Where(x => x.Name.Equals("Типовой - 125мм"))
+                        .FirstOrDefault();
+
+            using (var ts = new Transaction(doc, "Create roof"))
+            {
+                ts.Start();
+
+                CurveArray curveArray = new CurveArray();
+                curveArray.Append(Line.CreateBound(new XYZ(0, startPoint.Y-2, upLevel.Elevation), new XYZ(0, 0, upLevel.Elevation+10)));
+                curveArray.Append(Line.CreateBound(new XYZ(0, 0, upLevel.Elevation+10), new XYZ(0, endPoint.Y+2, upLevel.Elevation)));
+
+                ReferencePlane refPlane = doc.Create.NewReferencePlane(new XYZ(0, 0, 0), new XYZ(0, 0, 1), new XYZ(0, 1, 0), doc.ActiveView);
+                ExtrusionRoof roof = doc.Create.NewExtrusionRoof(curveArray, refPlane, upLevel, roofType, -distance * 0.5, distance*0.5);
+
+                ts.Commit();
+            }
         }
 
         private void AddWindows(Document doc, Level basedLevel, List<Wall> walls)
